@@ -19,13 +19,13 @@ To update:
 
 ```sh
 brew update
-brew upgrade --cask twine-app
+brew upgrade --cask standing-desks/tap/twine-app
 ```
 
 To uninstall:
 
 ```sh
-brew uninstall --cask twine-app
+brew uninstall --cask standing-desks/tap/twine-app
 ```
 
 Normal uninstall preserves saved sessions, workflows, transcripts, and settings.
@@ -44,27 +44,35 @@ installation. See [Twine's install notes](https://aravind-n.github.io/twine/docu
 This tap moved from `TwineProject/homebrew-tap` to
 `standing-desks/homebrew-tap`. GitHub redirects the old repository URL, and
 current Homebrew follows that redirect when updating the tap. Homebrew clears
-trust for the old tap name when the owner changes, so trust the cask at its new
-location once:
+trust for the old tap name when the owner changes. It can leave an existing
+cask's installation receipt pointing to `twineproject/tap`, even after `brew tap`
+lists `standing-desks/tap`. That stale receipt can make a general `brew upgrade`
+select the unrelated story-writing Twine from `homebrew/cask`.
+
+For an installation from the old tap, quit Twine and reinstall once from the
+fully qualified cask name to record its new source:
 
 ```sh
 brew update
-brew trust --cask standing-desks/tap/twine-app
-brew upgrade --cask twine-app
+brew reinstall --cask standing-desks/tap/twine-app
 ```
 
-Quit Twine before upgrading. If you updated an older Homebrew installation and
-`brew tap` still lists `twineproject/tap`, run `brew update` again before trusting
-the new cask. After migration, use the regular update commands above.
+The reinstall preserves saved sessions, workflows, transcripts, and settings.
+If `brew tap` still lists `twineproject/tap`, run `brew update` again before
+reinstalling. After migration, use the regular update commands above.
+
+Always use `standing-desks/tap/twine-app` when naming this cask in install and
+upgrade commands. The short name `twine-app` also exists in `homebrew/cask` and
+can select the other application even after the receipt is repaired. A new
+installation using the fully qualified name already records the correct tap.
 
 In Brewfiles, replace `tap "twineproject/tap"` with `tap "standing-desks/tap"`
 and update any fully qualified cask references to
 `standing-desks/tap/twine-app`. If your organization manages
 `HOMEBREW_ALLOWED_TAPS`, it must allow the new tap.
 
-The cask remains `twine-app`, and the migration does not require uninstalling
-Twine. Avoid `brew untap --force` as a migration shortcut: it can uninstall
-packages from the tap.
+The cask remains `twine-app`. Avoid `brew untap --force` as a migration shortcut:
+it can uninstall packages from the tap.
 
 ## Validate locally
 
