@@ -3,14 +3,19 @@ class Nouli < Formula
   homepage "https://standing-desks.github.io/nouli/"
   license "MIT"
 
-  depends_on arch: :arm64
+  on_macos do
+    depends_on arch: :arm64
+  end
 
   if OS.mac?
-    url "https://github.com/standing-desks/nouli/releases/download/v0.1.0/nouli-0.1.0-aarch64-apple-darwin.tar.gz"
-    sha256 "014decbff5ac82ba4f390acbdc892d328e8fc9ac59704640629f27944f266611"
-  elsif OS.linux?
-    url "https://github.com/standing-desks/nouli/releases/download/v0.1.0/nouli-0.1.0-aarch64-unknown-linux-gnu.tar.gz"
-    sha256 "1f10e0000182a31be71db88f12f3ef11b6b7fb68f40bc5283554688bb8772d31"
+    url "https://github.com/standing-desks/nouli/releases/download/v0.2.0/nouli-0.2.0-aarch64-apple-darwin.tar.gz"
+    sha256 "51c854887db8951e3f75a6e9f428f1908a3e0e99a6e91660eef94ad8dc82d87c"
+  elsif Hardware::CPU.arm?
+    url "https://github.com/standing-desks/nouli/releases/download/v0.2.0/nouli-0.2.0-aarch64-unknown-linux-gnu.tar.gz"
+    sha256 "44c6c3f9bf9611f13111ef058cbc2d07d995ce7d3b33a1ca5eae9f246e6cd915"
+  else
+    url "https://github.com/standing-desks/nouli/releases/download/v0.2.0/nouli-0.2.0-x86_64-unknown-linux-gnu.tar.gz"
+    sha256 "9333107a52fd72a04439795bacdeb221030efbf757e5cecb163ca80c3fd2482b"
   end
 
   def install
@@ -21,7 +26,7 @@ class Nouli < Formula
   end
 
   test do
-    assert_equal "nouli 0.1.0", shell_output("#{bin}/nouli --version").strip
+    assert_equal "nouli #{version}", shell_output("#{bin}/nouli --version").strip
     assert_match "Usage: nouli", shell_output("#{bin}/nouli --help")
     refute_path_exists testpath/".nouli"
   end

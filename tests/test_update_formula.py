@@ -62,14 +62,16 @@ class FormulaUpdateTests(unittest.TestCase):
             request.assert_not_called()
         self.assertEqual(self.formula.read_text(), self.source)
 
-    def test_updates_both_platforms_after_verifying_both_downloads(self):
+    def test_updates_every_platform_after_verifying_every_download(self):
         for version in ("1.2.4", "1.3.0", "2.0.0", "10.0.0"):
             with self.subTest(version=version):
                 self.formula.write_text(self.source)
                 with patch("scripts.update_formula.subprocess.run", side_effect=download):
                     self.assertEqual(update_formula(release(version), self.formula), (version, True))
                 contents = self.formula.read_text()
-                self.assertEqual(contents.count(f'/v{version}/nouli-{version}-'), 2)
+                self.assertEqual(contents.count(f'/v{version}/nouli-{version}-'), 3)
+                self.assertNotIn('1.2.3', contents)
+                self.assertIn('assert_equal "nouli #{version}"', contents)
                 for payload in PAYLOADS.values():
                     self.assertIn(hashlib.sha256(payload).hexdigest(), contents)
                 self.assertIn('depends_on arch: :arm64', contents)
@@ -102,11 +104,19 @@ class FormulaUpdateTests(unittest.TestCase):
                 update_formula(candidate, self.formula)
         self.assertEqual(self.formula.read_text(), self.source)
 
-    def test_unexpected_formula_shape_is_not_partially_overwritten(self):
-        source = self.source.replace('  elsif OS.linux?', '  elsif OS.linux? # unexpected edit')
+    def test_platform_urls_naming_different_releases_are_rejected(self):
+        source = self.source.replace('/v1.2.3/nouli-1.2.3-x86_64', '/v1.2.2/nouli-1.2.2-x86_64')
         self.formula.write_text(source)
         with patch("scripts.update_formula.subprocess.run", side_effect=download):
-            with self.assertRaisesRegex(ValueError, "linux formula URL"):
+            with self.assertRaisesRegex(ValueError, "matching formula version"):
+                update_formula(release(), self.formula)
+        self.assertEqual(self.formula.read_text(), source)
+
+    def test_unexpected_formula_shape_is_not_partially_overwritten(self):
+        source = self.source.replace('-x86_64-unknown-linux-gnu.tar.gz"\n', '-x86_64-unknown-linux-gnu.tar.gz" # unexpected edit\n')
+        self.formula.write_text(source)
+        with patch("scripts.update_formula.subprocess.run", side_effect=download):
+            with self.assertRaisesRegex(ValueError, "linux-intel formula URL"):
                 update_formula(release(), self.formula)
         self.assertEqual(self.formula.read_text(), source)
 

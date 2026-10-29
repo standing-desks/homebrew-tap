@@ -4,7 +4,7 @@ Homebrew packages for [Nouli](https://github.com/standing-desks/nouli) and [Hand
 
 ## Nouli
 
-Nouli is a multi-turn decision harness. The formula installs the published executable for Apple silicon macOS or ARM64 GNU/Linux. Linux requires system glibc 2.38 or newer; the release is tested on Ubuntu 24.04. Rust and provider credentials are not needed to install it.
+Nouli is a multi-turn decision harness. The formula installs the published executable for Apple silicon macOS, or ARM64 or x86_64 GNU/Linux. Linux requires system glibc 2.38 or newer; the release is tested on Ubuntu 24.04. Rust and provider credentials are not needed to install it.
 
 ```sh
 brew install standing-desks/tap/nouli
