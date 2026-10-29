@@ -10,21 +10,116 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: Tap validation
+  select:
+    name: Check tooling and select packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      handshake: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.handshake == 'true' }}
+      nouli: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.nouli == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          base: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'pull_request' && github.base_ref || 'HEAD~1' }}
+          filters: |
+            handshake:
+              - 'Casks/**'
+              - 'cask_renames.json'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'Makefile'
+              - '.github/**'
+            nouli:
+              - 'Formula/nouli.rb'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'Makefile'
+              - '.github/**'
+      - name: Test release update and PR protections
+        run: python3 -m unittest discover -s tests -v
+      - name: Lint workflows
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh
+  handshake:
+    name: Install Handshake cask
+    needs: select
+    if: needs.select.outputs.handshake == 'true'
     runs-on: macos-26
     timeout-minutes: 20
     env:
       TAP: ${{ github.repository_owner == 'TwineProject' && 'twineproject/tap' || 'standing-desks/tap' }}
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
     steps:
       - uses: actions/checkout@v7
-      - name: Install validation tools
-        run: brew install actionlint shellcheck
-      - name: Check cask and updater
-        run: make check
+      - name: Register the CI checkout
+        run: bash scripts/link-tap.sh
+      - name: Trust the cask in this CI installation
+        run: |
+          if brew command trust >/dev/null 2>&1; then
+            brew trust --cask "$TAP/handshake"
+          fi
+      - name: Check cask style
+        run: brew style Casks/handshake.rb
       - name: Audit released app
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
-        run: make audit-online
+        run: brew audit --cask --online --except=livecheck_version "$TAP/handshake"
       - name: Verify installation and removal
-        run: make install-smoke
+        run: bash scripts/install-smoke.sh
+  nouli:
+    name: Install Nouli (${{ matrix.os }})
+    needs: select
+    if: needs.select.outputs.nouli == 'true' && github.repository_owner == 'standing-desks'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Homebrew/actions/setup-homebrew@ae72030040bc05e2d65c41c577092cb98bc0a27e
+        with:
+          stable: true
+      - name: Register the CI checkout
+        run: bash scripts/link-tap.sh
+      - name: Trust the formula in this CI installation
+        run: brew trust --formula standing-desks/tap/nouli
+      - name: Check formula style
+        run: brew style Formula/nouli.rb
+      - name: Audit the formula
+        run: brew audit --formula standing-desks/tap/nouli
+      - name: Install the published binary
+        run: brew install --formula standing-desks/tap/nouli
+      - name: Check the installed CLI
+        run: brew test standing-desks/tap/nouli
+      - name: Remove the package
+        if: always()
+        run: |
+          if brew list --formula nouli >/dev/null 2>&1; then
+            brew uninstall --formula standing-desks/tap/nouli
+          fi
+  check:
+    name: Tap validation
+    needs: [select, handshake, nouli]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the selected checks to pass
+        if: needs.select.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

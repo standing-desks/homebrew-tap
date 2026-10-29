@@ -1,17 +1,36 @@
-# Handshake Homebrew tap
+# Standing Desks Homebrew tap
 
-Homebrew distribution for [Handshake](https://github.com/standing-desks/handshake), a native
-macOS workspace for coordinating coding agents. The GitHub repository
-is `standing-desks/homebrew-tap`, which Homebrew addresses as `standing-desks/tap`.
+Homebrew packages for [Nouli](https://github.com/standing-desks/nouli) and [Handshake](https://github.com/standing-desks/handshake). The repository is `standing-desks/homebrew-tap`, addressed by Homebrew as `standing-desks/tap`.
 
-Handshake requires macOS 26 or later. Architecture requirements follow the release
-package: ARM64 packages require Apple Silicon; universal packages also support Intel.
+## Nouli
 
-The cask is `handshake`. The legacy `twine-app` and `twine-ade` tokens map to it.
+Nouli is a multi-turn decision harness. The formula installs the published executable for Apple silicon macOS or ARM64 GNU/Linux. Linux requires system glibc 2.38 or newer; the release is tested on Ubuntu 24.04. Rust and provider credentials are not needed to install it.
 
-## Install and update
+```sh
+brew install standing-desks/tap/nouli
+nouli --version
+```
 
-To install:
+To update:
+
+```sh
+brew update
+brew upgrade standing-desks/tap/nouli
+```
+
+To uninstall:
+
+```sh
+brew uninstall standing-desks/tap/nouli
+```
+
+Uninstalling preserves configuration and saved sessions in `~/.nouli` or a custom store. Follow the [Nouli user guide](https://standing-desks.github.io/nouli/guide/) to configure a provider.
+
+If you installed with Cargo, run `cargo uninstall nouli-cli` before switching to Homebrew. Remove any manually installed executable from your PATH too, so it does not shadow the Homebrew installation.
+
+## Handshake
+
+Handshake is a native macOS workspace for coordinating coding agents. It requires macOS 26 or later. The cask is `handshake`; legacy `twine-app` and `twine-ade` tokens map to it. ARM64 packages require Apple silicon; universal packages also support Intel.
 
 ```sh
 brew install --cask standing-desks/tap/handshake
@@ -26,11 +45,7 @@ brew update
 brew upgrade --cask standing-desks/tap/handshake
 ```
 
-Homebrew's [tap trust](https://docs.brew.sh/Tap-Trust) does not follow a cask
-rename. Trust the new canonical cask before updating; this keeps trust limited
-to Handshake. Omit the trust command on older Homebrew versions that do not
-provide it. The update migrates the existing package identity and retains its
-installation directory.
+[Tap trust](https://docs.brew.sh/Tap-Trust) does not follow a cask rename. Omit the trust command on older Homebrew versions. Existing `twineproject/tap` users can use `twineproject/tap/handshake` without switching taps or installing another copy.
 
 To uninstall:
 
@@ -38,100 +53,54 @@ To uninstall:
 brew uninstall --cask standing-desks/tap/handshake
 ```
 
-Normal uninstall preserves saved sessions, workflows, transcripts, and settings.
-The cask does not define a `zap` action that deletes this user data.
+Uninstalling preserves saved sessions, workflows, transcripts, and settings. If you installed by dragging the app into Applications, move the existing app out before the first Homebrew installation. Quit Handshake before upgrading.
 
-If you installed Twine or Handshake by dragging it into Applications, move the
-existing `Twine.app` or `Handshake.app` out of Applications before the first
-Homebrew installation. Quit the app before upgrading it.
+The cask installs the published, Developer ID signed and notarized DMG. Homebrew verifies its checksum. See [Handshake's installation notes](https://standing-desks.github.io/handshake/documentation/guide/#install).
 
-The cask installs the published DMG for the release. Release packages are
-Developer ID signed and notarized, and Homebrew verifies the download checksum before
-installation. See [Handshake's install notes](https://standing-desks.github.io/handshake/documentation/guide/#install).
+## Validate changes
 
-## Migration status
-
-The 0.4.0 cask intentionally contains `REPLACE_WITH_FINAL_RELEASE_SHA256`.
-This placeholder fails audit and must be replaced with the checksum of the
-finalized release artifact before publishing the migration. Never substitute a
-local candidate's checksum.
-
-## Validate locally
-
-The migration can be checked without Homebrew using `make test`, `actionlint`,
-and `shellcheck scripts/*.sh`. Run Homebrew checks only in a separate test account
-or VM with its own Homebrew, or in this tap's CI. Do not register this development
-checkout over a maintainer's installed tap.
-
-Install Homebrew, Python 3, GitHub CLI, `actionlint`, and `shellcheck`. Authenticate
-GitHub CLI with `gh auth login` to run the release updater.
+Run the updater tests and lint tools from this checkout:
 
 ```sh
-make check
-make audit-online
-make install-smoke
+make test
+actionlint
+shellcheck scripts/*.sh
 ```
 
-`make audit-online` validates the pinned release independently of which version
-is currently latest on GitHub. The updater discovers new stable releases;
-the audit and installation checks validate the selected package.
+PR checks select packages by changed files. They validate and install Handshake only when cask or shared tooling changes, and Nouli only when its formula or shared tooling changes. README-only changes skip package installations. Nouli is tested on macOS ARM64 and Ubuntu 24.04 ARM64. The required **Tap validation** check waits for all selected checks.
 
-`make install-smoke` installs into a temporary application directory and checks
-the bundle version, required architectures, and code signature. It validates the
-stapled notarization tickets and Gatekeeper acceptance for the app and DMG, then
-uninstalls the cask. It does not launch Handshake and refuses to run if this cask is
-already installed.
+Run Homebrew installation checks in CI or a disposable Homebrew installation. Keep development validation separate from your installed tap. `make link-tap` registers this checkout locally and refuses to replace an existing registration pointing elsewhere.
 
-The Homebrew checks register this checkout as `standing-desks/tap` through a local
-symlink. They refuse to replace an existing tap pointing at a different checkout.
-To remove the local registration later, run `brew untap standing-desks/tap`.
-
-To update the cask locally after publishing a stable release, run `make update`.
-Set `RELEASE_TAG` to a published `vMAJOR.MINOR.PATCH` tag to select a release.
+For a disposable installation, the Nouli checks are:
 
 ```sh
-make update
-make check
-make audit-online
-make install-smoke
-git diff -- Casks/handshake.rb
+make link-tap
+brew trust --formula standing-desks/tap/nouli
+brew style Formula/nouli.rb
+brew audit --formula standing-desks/tap/nouli
+brew install --formula standing-desks/tap/nouli
+brew test standing-desks/tap/nouli
+brew uninstall --formula standing-desks/tap/nouli
 ```
 
-The updater accepts published `vMAJOR.MINOR.PATCH` releases from `standing-desks/handshake`,
-prefers a DMG, and falls back to a ZIP. It determines the architecture from the
-selected asset's filename, accepting ARM64 or universal packages regardless of
-release version and rejecting ambiguous packages. ARM64 packages add
-`depends_on arch: :arm64`; universal packages remove that requirement. The
-version, download URL, and checksum come from the selected release.
-The updater downloads the archive and `SHA256SUMS` and verifies the checksum
-before changing the cask. It rejects drafts, prereleases, nightlies, and
-incomplete releases, and never downgrades the cask or replaces a published
-version in place.
+Handshake's `make check`, `make audit-online`, and `make install-smoke` retain its cask validation and signed-app installation checks. Its smoke check uses a temporary application directory, does not launch the app, and refuses to run if the cask is already installed.
 
-## Update automation
+## Release updates
 
-The **Update Handshake cask** workflow runs when this tap receives a
-`repository_dispatch` event of type `handshake-release-published` or the legacy
-`twine-release-published` event. A workflow in
-`standing-desks/handshake` must send that event when a stable release is published. You
-can also start the updater manually from Actions; it has no timed schedule.
+Authenticate GitHub CLI, then select the package:
 
-Release notifications select the published stable tag from `standing-desks/handshake`;
-manual runs select its latest published stable release. It verifies the download checksum, validates the cask, and
-opens a PR as a dedicated GitHub App. The workflow waits for the required
-**Tap validation** check, then squash-merges that PR's exact validated commit.
+```sh
+make update                     # Handshake
+make update PACKAGE=nouli       # Nouli
+make update PACKAGE=nouli RELEASE_TAG=v0.1.0
+```
 
-Only the `maintainers` team and update App can merge to `main`. Both must use PRs
-and pass the checks, including administrators. The bot merges only its own
-verified update to `Casks/handshake.rb`; it does not merge other contributions.
-Human approval is not required for these release updates. GitHub's general
-auto-merge option is disabled; automatic merging is performed by this updater.
+The updater selects a published stable release, verifies each downloaded archive against its published checksums, and updates the package definition. It rejects incomplete releases and leaves the package unchanged for the same or an older version. Handshake uses `SHA256SUMS`; Nouli uses a `.sha256` sidecar for each platform archive.
 
-The update workflow requires a `TAP_APP_CLIENT_ID` repository variable and a
-`TAP_APP_PRIVATE_KEY` Actions secret for the dedicated GitHub App. The App needs
-access only to this tap, with Contents and Pull requests read/write permissions.
-No token for the source repository is required. Repository owners can manage the
-settings and team membership.
+The **Update release packages** workflow receives `handshake-release-published`, legacy `twine-release-published`, and `nouli-release-published` dispatches. A manual run can select a package and release tag, or use its latest stable release. There is no timed schedule.
 
-Homebrew installs new versions when users run `brew upgrade`. Handshake has no
-automatic updater inside the app.
+The updater runs on Linux, opens a package-specific PR, waits for **Tap validation**, and squash-merges that exact bot commit. Installation checks run in the PR, once per selected package/platform. Each automated PR may change only its selected package file. Nouli updates are restricted to this Standing Desks tap; Handshake also supports the compatibility tap.
+
+The tap needs the existing `TAP_APP_CLIENT_ID` repository variable and `TAP_APP_PRIVATE_KEY` Actions secret. The App requires Contents and Pull requests read/write access to this tap. Source repositories use the same App to dispatch release notifications, with Contents write access to the tap. In Nouli, configure these names in Settings > Secrets and variables > Actions. Private keys belong in Actions secrets, never repository files.
+
+Only the maintainers and update App can merge to `main`, through PRs with passing checks. Human approval is not required for the bot's verified release updates. Users receive packaged updates when they run `brew upgrade`.
