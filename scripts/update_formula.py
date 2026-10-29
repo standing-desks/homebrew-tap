@@ -12,7 +12,13 @@ from scripts.update_cask import verified_checksum, version_tuple
 
 UPSTREAM = "standing-desks/nouli"
 FORMULA = Path(__file__).resolve().parents[1] / "Formula/nouli.rb"
-TARGETS = {"macos": "aarch64-apple-darwin", "linux": "aarch64-unknown-linux-gnu"}
+TARGETS = {
+    "macos": "aarch64-apple-darwin",
+    "linux-arm": "aarch64-unknown-linux-gnu",
+    "linux-intel": "x86_64-unknown-linux-gnu",
+}
+# The formula states its version once; every URL builds on it.
+VERSION_LINE = re.compile(r'^  version "([0-9]+\.[0-9]+\.[0-9]+)"$', re.MULTILINE)
 
 
 def release_assets(release):
@@ -37,9 +43,9 @@ def release_assets(release):
 def update_formula(release, formula=FORMULA):
     version, assets = release_assets(release)
     contents = formula.read_text()
-    current = re.findall(r'/releases/download/v([0-9]+\.[0-9]+\.[0-9]+)/nouli-\1-aarch64-', contents)
-    if len(current) != 2 or len(set(current)) != 1:
-        raise ValueError("Expected matching formula versions in both platform URLs")
+    current = VERSION_LINE.findall(contents)
+    if len(current) != 1:
+        raise ValueError("Expected exactly one formula version line")
     if version_tuple(version) <= version_tuple(current[0]):
         print(f"Keeping Nouli {current[0]}; selected release is {version}")
         return current[0], False
@@ -57,22 +63,18 @@ def update_formula(release, formula=FORMULA):
                 Path(directory) / name, Path(directory) / (name + ".sha256"), assets[name]
             )
 
+    contents = VERSION_LINE.sub(f'  version "{version}"', contents)
     for platform, target in TARGETS.items():
-        url = (f"https://github.com/{UPSTREAM}/releases/download/v{current[0]}/"
-               f"nouli-{current[0]}-{target}.tar.gz")
-        condition = "if OS.mac?" if platform == "macos" else "elsif OS.linux?"
-        pattern = (rf'(  {re.escape(condition)}\n    url "{re.escape(url)}"\n'
-                   rf'    sha256 ")[0-9a-f]{{64}}(")')
-        new_url = url.replace(f"/v{current[0]}/nouli-{current[0]}-", f"/v{version}/nouli-{version}-")
-        contents, count = re.subn(
-            pattern, lambda match: match[1].replace(url, new_url) + checksums[platform] + match[2], contents
-        )
+        url = (f"https://github.com/{UPSTREAM}/releases/download/v#{{version}}/"
+               f"nouli-#{{version}}-{target}.tar.gz")
+        pattern = rf'(\n    url "{re.escape(url)}"\n    sha256 ")[0-9a-f]{{64}}(")'
+        contents, count = re.subn(pattern, lambda match: match[1] + checksums[platform] + match[2], contents)
         if count != 1:
             raise ValueError(f"Expected exactly one {platform} formula URL and checksum")
     temporary = formula.with_suffix(".rb.tmp")
     temporary.write_text(contents)
     temporary.replace(formula)
-    print(f"Updated Nouli {current[0]} to {version}; both archive SHA-256 checksums verified")
+    print(f"Updated Nouli {current[0]} to {version}; all archive SHA-256 checksums verified")
     return version, True
 
 

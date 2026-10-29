@@ -39,7 +39,7 @@ class FormulaUpdateTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.formula = Path(self.directory.name) / "nouli.rb"
-        self.source = re.sub(r'/v[0-9]+\.[0-9]+\.[0-9]+/nouli-[0-9]+\.[0-9]+\.[0-9]+-', '/v1.2.3/nouli-1.2.3-', FORMULA.read_text())
+        self.source = re.sub(r'version "[0-9]+\.[0-9]+\.[0-9]+"', 'version "1.2.3"', FORMULA.read_text())
         self.formula.write_text(self.source)
 
     def test_requires_a_stable_published_complete_release(self):
@@ -62,14 +62,17 @@ class FormulaUpdateTests(unittest.TestCase):
             request.assert_not_called()
         self.assertEqual(self.formula.read_text(), self.source)
 
-    def test_updates_both_platforms_after_verifying_both_downloads(self):
+    def test_updates_every_platform_after_verifying_every_download(self):
         for version in ("1.2.4", "1.3.0", "2.0.0", "10.0.0"):
             with self.subTest(version=version):
                 self.formula.write_text(self.source)
                 with patch("scripts.update_formula.subprocess.run", side_effect=download):
                     self.assertEqual(update_formula(release(version), self.formula), (version, True))
                 contents = self.formula.read_text()
-                self.assertEqual(contents.count(f'/v{version}/nouli-{version}-'), 2)
+                self.assertEqual(contents.count(f'version "{version}"'), 1)
+                self.assertNotIn('1.2.3', contents)
+                self.assertEqual(contents.count('/v#{version}/nouli-#{version}-'), 3)
+                self.assertIn('assert_equal "nouli #{version}"', contents)
                 for payload in PAYLOADS.values():
                     self.assertIn(hashlib.sha256(payload).hexdigest(), contents)
                 self.assertIn('depends_on arch: :arm64', contents)
@@ -102,11 +105,21 @@ class FormulaUpdateTests(unittest.TestCase):
                 update_formula(candidate, self.formula)
         self.assertEqual(self.formula.read_text(), self.source)
 
+    def test_a_formula_without_one_version_line_is_rejected(self):
+        for source in (self.source.replace('  version "1.2.3"\n', ''),
+                       self.source.replace('  version "1.2.3"\n', '  version "1.2.3"\n  version "1.2.3"\n')):
+            with self.subTest(lines=source.count('  version "')):
+                self.formula.write_text(source)
+                with patch("scripts.update_formula.subprocess.run", side_effect=download):
+                    with self.assertRaisesRegex(ValueError, "exactly one formula version line"):
+                        update_formula(release(), self.formula)
+                self.assertEqual(self.formula.read_text(), source)
+
     def test_unexpected_formula_shape_is_not_partially_overwritten(self):
-        source = self.source.replace('  elsif OS.linux?', '  elsif OS.linux? # unexpected edit')
+        source = self.source.replace('-x86_64-unknown-linux-gnu.tar.gz"\n', '-x86_64-unknown-linux-gnu.tar.gz" # unexpected edit\n')
         self.formula.write_text(source)
         with patch("scripts.update_formula.subprocess.run", side_effect=download):
-            with self.assertRaisesRegex(ValueError, "linux formula URL"):
+            with self.assertRaisesRegex(ValueError, "linux-intel formula URL"):
                 update_formula(release(), self.formula)
         self.assertEqual(self.formula.read_text(), source)
 
