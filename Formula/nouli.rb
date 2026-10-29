@@ -1,6 +1,6 @@
 class Nouli < Formula
   desc "Multi-turn harness for decision models"
-  homepage "https://github.com/standing-desks/nouli"
+  homepage "https://standing-desks.github.io/nouli/"
   license "MIT"
 
   depends_on arch: :arm64
