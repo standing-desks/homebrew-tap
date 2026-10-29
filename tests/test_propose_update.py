@@ -95,10 +95,10 @@ class ProposeUpdateTests(unittest.TestCase):
             return "Merged after validation"
         raise AssertionError(f"Unexpected GitHub command: {args}")
 
-    def propose(self):
+    def propose(self, package="handshake"):
         with patch.object(updater, "run", self.fake_run):
             updater.propose_update(
-                self.root, self.version, self.app_slug, self.repository, "read-check-token"
+                self.root, self.version, self.app_slug, self.repository, "read-check-token", package
             )
 
     def publish_existing_branch(self, extra_change=False):
@@ -256,6 +256,57 @@ class ProposeUpdateTests(unittest.TestCase):
                 self.propose()
         self.assertFalse(self.merge_calls())
 
+
+    def prepare_nouli(self):
+        self.cask.write_text(self.cask.read_text().replace(self.version, self.current_version))
+        (self.root / "Formula").mkdir()
+        self.formula = self.root / "Formula/nouli.rb"
+        self.formula.write_text(
+            'class Nouli < Formula\n' + ''.join(
+                f'    url "https://github.com/standing-desks/nouli/releases/download/v{self.current_version}/nouli-{self.current_version}-{target}.tar.gz"\n'
+                for target in ("aarch64-apple-darwin", "aarch64-unknown-linux-gnu")
+            ) + 'end\n'
+        )
+        self.git("add", ".")
+        self.git("commit", "-m", "formula: add initial Nouli package")
+        self.git("push", "origin", "main")
+        self.formula.write_text(self.formula.read_text().replace(self.current_version, self.version))
+        self.branch = f"formula/nouli-{self.version}"
+
+    def test_nouli_pr_contains_only_the_formula_and_merges_its_validated_head(self):
+        self.prepare_nouli()
+        self.propose("nouli")
+        head = self.remote_head()
+        self.assertEqual(self.git("diff", "--name-only", "main", head), "Formula/nouli.rb")
+        self.assertEqual(self.merge_calls()[0][-2:], ("--match-head-commit", head))
+        creation = next(c for c in self.gh_calls if c[1:3] == ("pr", "create"))
+        self.assertEqual(creation[creation.index("--title") + 1],
+                         f"formula: replace Nouli release with {self.version}")
+
+    def test_nouli_update_cannot_include_a_handshake_change(self):
+        self.prepare_nouli()
+        self.cask.write_text(self.cask.read_text().replace(self.current_version, self.version))
+        with self.assertRaisesRegex(ValueError, "change only Formula/nouli.rb"):
+            self.propose("nouli")
+        self.assertFalse(self.merge_calls())
+
+    def test_nouli_update_cannot_publish_to_the_legacy_tap(self):
+        self.repository = "TwineProject/homebrew-tap"
+        with self.assertRaisesRegex(ValueError, "Standing Desks tap"):
+            self.propose("nouli")
+        self.assertFalse(self.gh_calls)
+
+    def test_unknown_package_is_rejected_before_github_access(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported release package"):
+            self.propose("unknown")
+        self.assertFalse(self.gh_calls)
+
+    def test_failed_nouli_validation_cannot_merge(self):
+        self.prepare_nouli()
+        self.validation_states = ["FAILURE"]
+        with self.assertRaisesRegex(ValueError, "did not pass"):
+            self.propose("nouli")
+        self.assertFalse(self.merge_calls())
 
 if __name__ == "__main__":
     unittest.main()

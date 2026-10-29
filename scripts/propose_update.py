@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a validated cask update and request merge through branch protection."""
+"""Publish a verified release update and merge its exact commit after PR checks."""
 
 import json
 import os
@@ -12,6 +12,10 @@ import time
 REPOSITORY = "standing-desks/homebrew-tap"
 REPOSITORIES = {REPOSITORY, "TwineProject/homebrew-tap"}
 CASK = "Casks/handshake.rb"
+PACKAGES = {
+    "handshake": (CASK, "Handshake", "cask", "standing-desks/handshake"),
+    "nouli": ("Formula/nouli.rb", "Nouli", "formula", "standing-desks/nouli"),
+}
 
 def run(root, *args, token=None):
     return subprocess.run(
@@ -43,18 +47,26 @@ def wait_for_validation(root, number, head, check_token, repository=REPOSITORY, 
         time.sleep(10)
     raise TimeoutError("Timed out waiting for required Tap validation")
 
-def propose_update(root, version, app_slug, repository, check_token):
+def propose_update(root, version, app_slug, repository, check_token, package="handshake"):
     if repository not in REPOSITORIES:
         raise ValueError("The update bot is restricted to the two maintained Handshake taps")
+    if package not in PACKAGES:
+        raise ValueError("Unsupported release package")
+    if package == "nouli" and repository != REPOSITORY:
+        raise ValueError("Nouli updates are restricted to the Standing Desks tap")
+    package_file, name, kind, upstream = PACKAGES[package]
     owner = repository.split("/", 1)[0]
     if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
         raise ValueError("Expected a stable MAJOR.MINOR.PATCH version")
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", app_slug):
         raise ValueError("Expected the GitHub App's slug")
-    if f'  version "{version}"' not in (root / CASK).read_text():
-        raise ValueError("The cask does not contain the validated version")
+    contents = (root / package_file).read_text()
+    marker = f'  version "{version}"' if package == "handshake" else f"/releases/download/v{version}/nouli-{version}-"
+    if contents.count(marker) != (1 if package == "handshake" else 2):
+        raise ValueError("The package does not contain the selected version")
 
-    branch = f"cask/handshake-{version}"
+    branch = f"{kind}/{package}-{version}"
+    title = f"{kind}: replace {name} release with {version}"
     bot = f"{app_slug}[bot]"
     pulls = json.loads(run(
         root, "gh", "api", "--method", "GET", f"repos/{repository}/pulls",
@@ -70,9 +82,9 @@ def propose_update(root, version, app_slug, repository, check_token):
             raise ValueError("The existing PR was not opened by the tap update bot")
 
     changes = run(root, "git", "status", "--porcelain", "--untracked-files=all")
-    if changes not in (f" M {CASK}", f"M  {CASK}"):
-        raise ValueError("A release update must change only Casks/handshake.rb")
-    run(root, "git", "add", "--", CASK)
+    if changes not in (f" M {package_file}", f"M  {package_file}"):
+        raise ValueError(f"A release update must change only {package_file}")
+    run(root, "git", "add", "--", package_file)
     validated_tree = run(root, "git", "write-tree")
     run(root, "gh", "auth", "setup-git", "--hostname", "github.com")
 
@@ -90,24 +102,24 @@ def propose_update(root, version, app_slug, repository, check_token):
         run(
             root, "git", "-c", f"user.name={bot}",
             "-c", f"user.email={user['id']}+{bot}@users.noreply.github.com",
-            "commit", "-m", f"cask: replace Handshake release with {version}",
+            "commit", "-m", title,
         )
         head = run(root, "git", "rev-parse", "HEAD")
         run(root, "git", "push", "origin", f"HEAD:refs/heads/{branch}")
 
     if existing is None:
-        with tempfile.TemporaryDirectory(prefix="handshake-cask-pr-") as directory:
+        with tempfile.TemporaryDirectory(prefix="tap-release-pr-") as directory:
             body = Path(directory) / "body.md"
             body.write_text(
-                f"Update Handshake to the published stable release v{version}.\n\n"
-                "The updater verified the archive against SHA256SUMS. Cask style, "
-                "audit, updater tests, and installation checks passed before this PR.\n\n"
-                f"Upstream release: https://github.com/standing-desks/handshake/releases/tag/v{version}\n"
+                f"Update {name} to the published stable release v{version}.\n\n"
+                "The updater verified the release archives against their published checksum files. "
+                "Tap validation must pass for this exact commit before it can merge.\n\n"
+                f"Upstream release: https://github.com/{upstream}/releases/tag/v{version}\n"
             )
             print(run(
                 root, "gh", "pr", "create", "--repo", repository,
                 "--base", "main", "--head", branch,
-                "--title", f"cask: replace Handshake release with {version}",
+                "--title", title,
                 "--body-file", str(body),
             ))
 
@@ -124,9 +136,9 @@ def propose_update(root, version, app_slug, repository, check_token):
         or pull["baseRefName"] != "main"
         or pull["headRefName"] != branch
         or pull["headRefOid"] != head
-        or [file["path"] for file in pull["files"]] != [CASK]
+        or [file["path"] for file in pull["files"]] != [package_file]
     ):
-        raise ValueError("The PR must contain exactly the validated bot cask update")
+        raise ValueError("The PR must contain exactly the validated bot package update")
     wait_for_validation(root, pull["number"], head, check_token, repository)
     print(run(
         root, "gh", "pr", "merge", str(pull["number"]), "--repo", repository,
@@ -138,5 +150,5 @@ if __name__ == "__main__":
     propose_update(
         Path(__file__).resolve().parent.parent,
         os.environ["VERSION"], os.environ["APP_SLUG"], os.environ["GH_REPO"],
-        os.environ["GH_CHECK_TOKEN"],
+        os.environ["GH_CHECK_TOKEN"], os.environ.get("PACKAGE", "handshake"),
     )

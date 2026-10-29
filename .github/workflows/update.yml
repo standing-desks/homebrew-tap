@@ -1,9 +1,19 @@
-name: Update Handshake cask
+name: Update release packages
 
 on:
   repository_dispatch:
-    types: [handshake-release-published, twine-release-published]
+    types: [handshake-release-published, twine-release-published, nouli-release-published]
   workflow_dispatch:
+    inputs:
+      package:
+        description: Package to update
+        type: choice
+        options: [handshake, nouli]
+        default: handshake
+      release_tag:
+        description: Published vMAJOR.MINOR.PATCH tag (blank selects latest stable)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -11,16 +21,17 @@ permissions:
   checks: read
 
 concurrency:
-  group: update-handshake-cask
+  group: update-${{ github.event.action == 'nouli-release-published' && 'nouli' || inputs.package || 'handshake' }}
   cancel-in-progress: false
 
 jobs:
   update:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-26
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     env:
-      TAP: ${{ github.repository_owner == 'TwineProject' && 'twineproject/tap' || 'standing-desks/tap' }}
+      PACKAGE: ${{ github.event.action == 'nouli-release-published' && 'nouli' || inputs.package || 'handshake' }}
+      PYTHONDONTWRITEBYTECODE: 1
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,30 +39,19 @@ jobs:
           persist-credentials: false
       - name: Authenticate the tap update bot
         id: app-token
-        uses: actions/create-github-app-token@v3.2.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ vars.TAP_APP_CLIENT_ID }}
           private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-      - name: Update from the latest published stable release
+      - name: Verify the selected release and update its package
         id: update
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.client_payload.release_tag }}
         run: make update
-      - name: Install validation tools
-        if: steps.update.outputs.changed == 'true'
-        run: brew install actionlint shellcheck
-      - name: Validate the updated cask
-        if: steps.update.outputs.changed == 'true'
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
-        run: |
-          make check
-          make audit-online
-          make install-smoke
-      - name: Open the update PR and merge after validation
+      - name: Open the update PR and merge its validated commit
         if: steps.update.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
