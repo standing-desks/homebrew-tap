@@ -17,8 +17,8 @@ TARGETS = {
     "linux-arm": "aarch64-unknown-linux-gnu",
     "linux-intel": "x86_64-unknown-linux-gnu",
 }
-# The formula states its version once; every URL builds on it.
-VERSION_LINE = re.compile(r'^  version "([0-9]+\.[0-9]+\.[0-9]+)"$', re.MULTILINE)
+# Homebrew reads the formula's version from its URLs, so every URL names the same release.
+URL_VERSION = re.compile(r'/releases/download/v([0-9]+\.[0-9]+\.[0-9]+)/nouli-\1-')
 
 
 def release_assets(release):
@@ -43,9 +43,9 @@ def release_assets(release):
 def update_formula(release, formula=FORMULA):
     version, assets = release_assets(release)
     contents = formula.read_text()
-    current = VERSION_LINE.findall(contents)
-    if len(current) != 1:
-        raise ValueError("Expected exactly one formula version line")
+    current = URL_VERSION.findall(contents)
+    if len(current) != len(TARGETS) or len(set(current)) != 1:
+        raise ValueError("Expected one matching formula version in every platform URL")
     if version_tuple(version) <= version_tuple(current[0]):
         print(f"Keeping Nouli {current[0]}; selected release is {version}")
         return current[0], False
@@ -63,12 +63,14 @@ def update_formula(release, formula=FORMULA):
                 Path(directory) / name, Path(directory) / (name + ".sha256"), assets[name]
             )
 
-    contents = VERSION_LINE.sub(f'  version "{version}"', contents)
     for platform, target in TARGETS.items():
-        url = (f"https://github.com/{UPSTREAM}/releases/download/v#{{version}}/"
-               f"nouli-#{{version}}-{target}.tar.gz")
-        pattern = rf'(\n    url "{re.escape(url)}"\n    sha256 ")[0-9a-f]{{64}}(")'
-        contents, count = re.subn(pattern, lambda match: match[1] + checksums[platform] + match[2], contents)
+        url = (f"https://github.com/{UPSTREAM}/releases/download/v{current[0]}/"
+               f"nouli-{current[0]}-{target}.tar.gz")
+        new_url = url.replace(f"/v{current[0]}/nouli-{current[0]}-", f"/v{version}/nouli-{version}-")
+        pattern = rf'(\n    url "){re.escape(url)}("\n    sha256 ")[0-9a-f]{{64}}(")'
+        contents, count = re.subn(
+            pattern, lambda match: match[1] + new_url + match[2] + checksums[platform] + match[3], contents
+        )
         if count != 1:
             raise ValueError(f"Expected exactly one {platform} formula URL and checksum")
     temporary = formula.with_suffix(".rb.tmp")
