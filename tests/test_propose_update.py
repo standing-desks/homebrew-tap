@@ -264,7 +264,7 @@ class ProposeUpdateTests(unittest.TestCase):
         self.formula.write_text(
             'class Nouli < Formula\n' + ''.join(
                 f'    url "https://github.com/standing-desks/nouli/releases/download/v{self.current_version}/nouli-{self.current_version}-{target}.tar.gz"\n'
-                for target in ("aarch64-apple-darwin", "aarch64-unknown-linux-gnu")
+                for target in ("aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu")
             ) + 'end\n'
         )
         self.git("add", ".")
@@ -282,6 +282,15 @@ class ProposeUpdateTests(unittest.TestCase):
         creation = next(c for c in self.gh_calls if c[1:3] == ("pr", "create"))
         self.assertEqual(creation[creation.index("--title") + 1],
                          f"formula: replace Nouli release with {self.version}")
+
+    def test_nouli_update_must_replace_every_target(self):
+        self.prepare_nouli()
+        lines = self.formula.read_text().splitlines(keepends=True)
+        lines[-2] = lines[-2].replace(self.version, self.current_version)
+        self.formula.write_text("".join(lines))
+        with self.assertRaisesRegex(ValueError, "does not contain the selected version"):
+            self.propose("nouli")
+        self.assertFalse(self.gh_calls)
 
     def test_nouli_update_cannot_include_a_handshake_change(self):
         self.prepare_nouli()
