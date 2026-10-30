@@ -61,8 +61,13 @@ def propose_update(root, version, app_slug, repository, check_token, package="ha
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", app_slug):
         raise ValueError("Expected the GitHub App's slug")
     contents = (root / package_file).read_text()
-    marker = f'  version "{version}"' if package == "handshake" else f"/releases/download/v{version}/nouli-{version}-"
-    if contents.count(marker) != (1 if package == "handshake" else 2):
+    if package == "handshake":
+        current = contents.count(f'  version "{version}"') == 1
+    else:
+        # Every Nouli download URL must name the selected version, however many targets the formula has.
+        urls = contents.count("/releases/download/v")
+        current = urls > 0 and contents.count(f"/releases/download/v{version}/nouli-{version}-") == urls
+    if not current:
         raise ValueError("The package does not contain the selected version")
 
     branch = f"{kind}/{package}-{version}"
