@@ -8,14 +8,14 @@ class Nouli < Formula
   end
 
   if OS.mac?
-    url "https://github.com/standing-desks/nouli/releases/download/v0.4.0/nouli-0.4.0-aarch64-apple-darwin.tar.gz"
-    sha256 "6c1ae28667be1eaf67c2be6944d6838294da0ead84dac50d67d9efd6b6a5c0c6"
+    url "https://github.com/standing-desks/nouli/releases/download/v0.4.1/nouli-0.4.1-aarch64-apple-darwin.tar.gz"
+    sha256 "e962665e83dbbcd8b68b021d41995b273e0049c3ff0881c0aa8cbe70df2860fd"
   elsif Hardware::CPU.arm?
-    url "https://github.com/standing-desks/nouli/releases/download/v0.4.0/nouli-0.4.0-aarch64-unknown-linux-gnu.tar.gz"
-    sha256 "146c8f58bc46f2c1b29aa447ffca2d10b7c1536c800a66dddc879b7e1159c7d2"
+    url "https://github.com/standing-desks/nouli/releases/download/v0.4.1/nouli-0.4.1-aarch64-unknown-linux-gnu.tar.gz"
+    sha256 "54eed1bae7421f0766593695781858341cff0c33e03f9dc291ff5b3f1d089ccc"
   else
-    url "https://github.com/standing-desks/nouli/releases/download/v0.4.0/nouli-0.4.0-x86_64-unknown-linux-gnu.tar.gz"
-    sha256 "44bffa1e441f1bb231723bcecd0d1a3ac748175b938330b8b9bc6d4dfeb36f47"
+    url "https://github.com/standing-desks/nouli/releases/download/v0.4.1/nouli-0.4.1-x86_64-unknown-linux-gnu.tar.gz"
+    sha256 "f989f5e276eebcc6e3af78375ed2e9b4d00b9d04fbfbbcb9754f7fdaa75e0854"
   end
 
   def install
