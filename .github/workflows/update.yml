@@ -2,14 +2,9 @@ name: Update release packages
 
 on:
   repository_dispatch:
-    types: [handshake-release-published, twine-release-published, nouli-release-published]
+    types: [handshake-release-published, twine-release-published]
   workflow_dispatch:
     inputs:
-      package:
-        description: Package to update
-        type: choice
-        options: [handshake, nouli]
-        default: handshake
       release_tag:
         description: Published vMAJOR.MINOR.PATCH tag (blank selects latest stable)
         type: string
@@ -21,7 +16,7 @@ permissions:
   checks: read
 
 concurrency:
-  group: update-${{ github.event.action == 'nouli-release-published' && 'nouli' || inputs.package || 'handshake' }}
+  group: update-handshake
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +25,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      PACKAGE: ${{ github.event.action == 'nouli-release-published' && 'nouli' || inputs.package || 'handshake' }}
       PYTHONDONTWRITEBYTECODE: 1
     steps:
       - uses: actions/checkout@v7
