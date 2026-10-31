@@ -14,7 +14,6 @@ REPOSITORIES = {REPOSITORY, "TwineProject/homebrew-tap"}
 CASK = "Casks/handshake.rb"
 PACKAGES = {
     "handshake": (CASK, "Handshake", "cask", "standing-desks/handshake"),
-    "nouli": ("Formula/nouli.rb", "Nouli", "formula", "standing-desks/nouli"),
 }
 
 def run(root, *args, token=None):
@@ -52,8 +51,6 @@ def propose_update(root, version, app_slug, repository, check_token, package="ha
         raise ValueError("The update bot is restricted to the two maintained Handshake taps")
     if package not in PACKAGES:
         raise ValueError("Unsupported release package")
-    if package == "nouli" and repository != REPOSITORY:
-        raise ValueError("Nouli updates are restricted to the Standing Desks tap")
     package_file, name, kind, upstream = PACKAGES[package]
     owner = repository.split("/", 1)[0]
     if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
@@ -61,13 +58,7 @@ def propose_update(root, version, app_slug, repository, check_token, package="ha
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", app_slug):
         raise ValueError("Expected the GitHub App's slug")
     contents = (root / package_file).read_text()
-    if package == "handshake":
-        current = contents.count(f'  version "{version}"') == 1
-    else:
-        # Every Nouli download URL must name the selected version, however many targets the formula has.
-        urls = contents.count("/releases/download/v")
-        current = urls > 0 and contents.count(f"/releases/download/v{version}/nouli-{version}-") == urls
-    if not current:
+    if contents.count(f'  version "{version}"') != 1:
         raise ValueError("The package does not contain the selected version")
 
     branch = f"{kind}/{package}-{version}"

@@ -19,7 +19,6 @@ jobs:
       pull-requests: read
     outputs:
       handshake: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.handshake == 'true' }}
-      nouli: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.nouli == 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,12 +32,6 @@ jobs:
             handshake:
               - 'Casks/**'
               - 'cask_renames.json'
-              - 'scripts/**'
-              - 'tests/**'
-              - 'Makefile'
-              - '.github/**'
-            nouli:
-              - 'Formula/nouli.rb'
               - 'scripts/**'
               - 'tests/**'
               - 'Makefile'
@@ -76,46 +69,9 @@ jobs:
         run: brew audit --cask --online --except=livecheck_version "$TAP/handshake"
       - name: Verify installation and removal
         run: bash scripts/install-smoke.sh
-  nouli:
-    name: Install Nouli (${{ matrix.os }})
-    needs: select
-    if: needs.select.outputs.nouli == 'true' && github.repository_owner == 'standing-desks'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, ubuntu-24.04-arm, ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_ANALYTICS: 1
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Homebrew/actions/setup-homebrew@ae72030040bc05e2d65c41c577092cb98bc0a27e
-        with:
-          stable: true
-      - name: Register the CI checkout
-        run: bash scripts/link-tap.sh
-      - name: Trust the formula in this CI installation
-        run: brew trust --formula standing-desks/tap/nouli
-      - name: Check formula style
-        run: brew style Formula/nouli.rb
-      - name: Audit the formula
-        run: brew audit --formula standing-desks/tap/nouli
-      - name: Install the published binary
-        run: brew install --formula standing-desks/tap/nouli
-      - name: Check the installed CLI
-        run: brew test standing-desks/tap/nouli
-      - name: Remove the package
-        if: always()
-        run: |
-          if brew list --formula nouli >/dev/null 2>&1; then
-            brew uninstall --formula standing-desks/tap/nouli
-          fi
   check:
     name: Tap validation
-    needs: [select, handshake, nouli]
+    needs: [select, handshake]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
